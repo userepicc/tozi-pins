@@ -1,0 +1,32 @@
+name: Daily pins
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 06:00 UTC = 11:00 Pakistan time
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-pins
+  cancel-in-progress: false
+
+jobs:
+  pins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pillow==11.0.0
+      - run: python pins.py
+      - name: Commit new pins and feeds
+        run: |
+          git config user.name "userepicc"
+          git config user.email "userepicc@gmail.com"
+          git add pins feeds state.json index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Daily pins $(date -u +%F)" -m "Agent: Claude (GitHub Action)"
+          git push
