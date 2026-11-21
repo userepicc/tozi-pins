@@ -87,8 +87,10 @@ def clean(text):
     return re.sub(r'\s+', ' ', text).replace(' ,', ',').strip()
 
 
-GENERIC = re.compile(r'^(why|what|how|faq|frequently|introduction|overview|conclusion|customi[sz]ation options|'
-                     r'best for|wholesale|send |get |order |request )|elevate your brand|^\W*$', re.I)
+GENERIC = re.compile(r'^(why|what|how|faq|frequently|introduction|overview|conclusion|customi[sz]ation|'
+                     r'best for|wholesale|send|get|order|request|sizes?|dimensions|materials?|sustainab|printing|print|finish|'
+                     r'features|benefits|specifications|design|add-ons|applications|uses|types|styles|structural|interior)'
+                     r'(?![a-z])|elevate your brand|options$|^\W*$', re.I)
 
 
 def subtitle(p):
@@ -174,6 +176,8 @@ def load_state():
 
 def next_items(prods, state, count):
     """Round 0 uses each product's first photo, round 1 the second photo, and so on. Boards rotate."""
+    if count <= 0:
+        return []
     done = {(x['product_id'], x['image']) for x in state['published']}
     queue = []
     for rnd in range(4):
@@ -232,13 +236,25 @@ def write_feeds(state):
         '<title>Tozi pin feeds</title><h1>Tozi Packaging pin feeds</h1><ul>' + ''.join(lines) + '</ul>')
 
 
-def run(count, dry):
+def seed_items(prods, state):
+    """One first-photo pin for every board that has no feed yet, so each feed URL exists before setup."""
+    have = {x['board'] for x in state['published']}
+    out = []
+    for p in sorted(prods, key=lambda p: p['id']):
+        b = board_of(p)
+        if b not in have and p['images']:
+            out.append((p, 0)); have.add(b)
+    return out
+
+
+def run(count, dry, seed=False):
     prods = products()
     state = load_state()
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
     out_dir = 'preview' if dry else 'pins'
     os.makedirs(os.path.join(ROOT, out_dir), exist_ok=True)
-    for i, (p, rnd) in enumerate(next_items(prods, state, count)):
+    todo = seed_items(prods, state) if seed else next_items(prods, state, count)
+    for i, (p, rnd) in enumerate(todo):
         title = clean(p['name'])[:100]
         sub = subtitle(p)
         data = draw_pin(fetch(p['images'][rnd]['src']), title, sub)
@@ -259,5 +275,6 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('--count', type=int, default=PER_RUN)
     ap.add_argument('--dry-run', action='store_true')
+    ap.add_argument('--seed-boards', action='store_true', help='one pin for each board without a feed')
     a = ap.parse_args()
-    run(a.count, a.dry_run)
+    run(a.count, a.dry_run, a.seed_boards)
